@@ -7,6 +7,6 @@ COPY package.json .
 COPY . .
 
 RUN npm install 
-
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["npm", "start"]
-# asd
+
