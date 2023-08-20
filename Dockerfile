@@ -1,4 +1,4 @@
-FROM amazon/aws-ecs-optimized-nodejs16:latest
+FROM node:16-alpine
 
 WORKDIR /app
 
