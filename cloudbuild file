@@ -1,0 +1,61 @@
+steps:
+- id: Docker build
+  name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '${_REPO_REGION}/${_GLOBAL_ARTIFACT}/${_REPO_NAME}/${_SERVICE_NAME}', '.']
+
+- id: Container image push
+  name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '${_REPO_REGION}/${_GLOBAL_ARTIFACT}/${_REPO_NAME}/${_SERVICE_NAME}']
+
+- id: Cloud run deploy
+  name: google/cloud-sdk
+  args:
+  - gcloud
+  - run
+  - deploy
+  - ${_SERVICE_NAME}
+  - --image=${_REPO_REGION}/${_GLOBAL_ARTIFACT}/${_REPO_NAME}/${_SERVICE_NAME}
+  - --region=${_REGION}
+  - --platform=managed
+  - --service-account=${_SERVICE_ACCOUNT}
+  - --max-instances=5
+  - --timeout=3600
+  - --memory=1Gi
+  - --vpc-connector=projects/${_HOST_PROJECT_ID}/locations/${_REGION}/connectors/${_VPC_CONNECTOR}
+  - --ingress=all
+  - --vpc-egress=all-traffic
+  - --allow-unauthenticated
+  - '--set-secrets'
+  - 'SECRET_KEY=dev-api-rgnl-academic-year-secret:latest'
+  allow_failure: true
+
+- id: publish to pubsub
+  name: 'gcr.io/cloud-builders/gcloud'
+  entrypoint: 'bash'
+  args:
+    - '-c'
+    - |
+      # Get the Git username
+      git_username=$(git show -s --format='%an' $COMMIT_SHA)
+      
+      url=$(gcloud builds describe $BUILD_ID --format='value(logUrl)')
+      message="$BUILD_ID,$PROJECT_ID,$REPO_NAME,$BRANCH_NAME,$COMMIT_SHA,$url,$_WEBEX_BOT_TOKEN,$_WEBEX_BOT_ROOM,$git_username"
+      gcloud pubsub topics publish projects/jenkins-ci-cd-193914/topics/webex-notification-topic --message "$message"
+
+images:
+- ${_REPO_REGION}/${_GLOBAL_ARTIFACT}/${_REPO_NAME}/${_SERVICE_NAME}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REPO_REGION: us-docker.pkg.dev
+  _REPO_NAME: dev-api-rgnl-academic-year-repo
+  _SERVICE_NAME: dev-api-rgnl-academic-year
+  _REGION: us-central1
+  _SERVICE_ACCOUNT: sa-np-chr-dev-us-central-01@np-chr-dev-us-central-01.iam.gserviceaccount.com
+  _VPC_CONNECTOR: np-central-serverless
+  _GLOBAL_ARTIFACT: glb-chr-artifactory
+  _HOST_PROJECT_ID: np-chr-core-sharedvpc
+  _WEBEX_BOT_TOKEN: NjYyNzZiYTUtYWRhMi00NDE4LTk2MmEtMmYwZjhiZDQ0ZjM4NTc3NGE3ZTItODA3_PF84_c095076e-5f06-467d-a3d8-fb027d14c841
+  _WEBEX_BOT_ROOM: Y2lzY29zcGFyazovL3VzL1JPT00vNzNiZjcyZTAtZGYxNi0xMWU2LWJiYmQtOGIxNjJhNjhhOWFm
